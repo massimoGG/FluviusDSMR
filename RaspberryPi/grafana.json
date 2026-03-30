@@ -1,0 +1,908 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": {
+                    "type": "grafana",
+                    "uid": "-- Grafana --"
+                },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "description": "DSMR Fluvius Meter",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": 4,
+    "links": [],
+    "liveNow": true,
+    "panels": [
+        {
+            "datasource": {
+                "type": "influxdb",
+                "uid": "bdoxwke2i8a9se"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "continuous-GrYlRd",
+                        "seriesBy": "min"
+                    },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": true,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 30,
+                        "gradientMode": "scheme",
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        },
+                        "insertNulls": false,
+                        "lineInterpolation": "stepBefore",
+                        "lineStyle": {
+                            "fill": "solid"
+                        },
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": true,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "dashed+area"
+                        }
+                    },
+                    "fieldMinMax": true,
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "dark-green",
+                                "value": null
+                            },
+                            {
+                                "color": "dark-red",
+                                "value": 0
+                            }
+                        ]
+                    },
+                    "unit": "watt"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byFrameRefID",
+                            "options": "Net"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Fluvius Net"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byFrameRefID",
+                            "options": "Solar"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Zonnepanelen"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "light-blue",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byFrameRefID",
+                            "options": "Peak"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Capaciteitsvermogen"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "red",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "custom.gradientMode",
+                                "value": "opacity"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 15,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "id": 4,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": true
+                },
+                "tooltip": {
+                    "maxHeight": 600,
+                    "mode": "multi",
+                    "sort": "none"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "query": "from(bucket: \"electricity\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"meter\")\n  |> filter(fn: (r) => r[\"_field\"] == \"actual_electricity_power_delivered\" or r[\"_field\"] == \"actual_electricity_power_received\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(\n    fn: (r) => ({\n    r with _value:\n        if r._field == \"actual_electricity_power_received\" then \n            -1000.0*r._value\n        else\n            1000.0*r._value,\n            })\n            )\n//group by time to isolate the values you want to sum together\n  |> group(columns: [\"_time\"], mode:\"by\")\n  |> sum(column: \"_value\")\n//to ungroup your data provide a group without any columns\n  |> group()\n  |> yield(name: \"mean\")",
+                    "refId": "Net"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"electricity\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"meter\")\n  |> filter(fn: (r) => r[\"_field\"] == \"maximum_demand_running_month_value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _value: 1000.0*r._value}))\n  |> yield(name: \"mean\")",
+                    "refId": "Peak"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"solar\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"measurement\")\n  |> filter(fn: (r) => r[\"_field\"] == \"Pac1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n//group by time to isolate the values you want to sum together\n  |> group(columns: [\"_time\"], mode:\"by\")\n  |> sum(column: \"_value\")\n//to ungroup your data provide a group without any columns\n  |> group()\n  |> map(fn: (r) => ({ r with _value: -r._value })) \n  |> yield(name: \"mean\")",
+                    "refId": "Solar"
+                }
+            ],
+            "title": "Net Power",
+            "type": "timeseries"
+        },
+        {
+            "datasource": {
+                "type": "influxdb",
+                "uid": "bdoxwke2i8a9se"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "fixed",
+                        "seriesBy": "last"
+                    },
+                    "fieldMinMax": true,
+                    "mappings": [],
+                    "min": 0,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "kwatt"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "actual_electricity_power_delivered"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "From Net"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "purple",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "max",
+                                "value": 9.2
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "actual_electricity_power_received"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Injected to Net"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "green",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "max",
+                                "value": 7
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "maximum_demand_running_month_value"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Capaciteitsvermogen"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "blue",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "measurement Pac1 SB3000TL-21"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Achterkant 3kW"
+                            },
+                            {
+                                "id": "unit",
+                                "value": "watt"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "red",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "max",
+                                "value": 3000
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "measurement Pac1 SB4000TL-21"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Voorkant 4kW"
+                            },
+                            {
+                                "id": "unit",
+                                "value": "watt"
+                            },
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "yellow",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "max",
+                                "value": 4000
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 7,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "hideTimeOverride": true,
+            "id": 2,
+            "options": {
+                "minVizHeight": 75,
+                "minVizWidth": 75,
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showThresholdLabels": false,
+                "showThresholdMarkers": true,
+                "sizing": "auto"
+            },
+            "pluginVersion": "11.0.0",
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "query": "from(bucket: \"electricity\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"meter\")\n  |> filter(fn: (r) => r[\"_field\"] == \"actual_electricity_power_delivered\")\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+                    "refId": "Delivered"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"electricity\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"meter\")\n  |> filter(fn: (r) => r[\"_field\"] == \"actual_electricity_power_received\")\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+                    "refId": "Received"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"electricity\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"meter\")\n  |> filter(fn: (r) => r[\"_field\"] == \"maximum_demand_running_month_value\")\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+                    "refId": "Peak"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"solar\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"measurement\")\n  |> filter(fn: (r) => r[\"_field\"] == \"Pac1\")\n  |> filter(fn: (r) => r[\"inverter\"] == \"SB4000TL-21\" or r[\"inverter\"] == \"SB3000TL-21\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name:\"last\")",
+                    "refId": "Solar"
+                }
+            ],
+            "timeFrom": "1m",
+            "title": "Current Power",
+            "type": "gauge"
+        },
+        {
+            "datasource": {
+                "type": "influxdb",
+                "uid": "bdoxwke2i8a9se"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "fieldMinMax": true,
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "kwatth"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "meter_electricity_delivered_by_client_tariff_1"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "To net Tariff 1"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "meter_electricity_delivered_by_client_tariff_2"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "To net Tariff 2"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "meter_electricity_delivered_to_client_tariff_1"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "From net Tariff 1"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "meter_electricity_delivered_to_client_tariff_2"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "From net Tariff 2"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 7
+            },
+            "id": 3,
+            "options": {
+                "colorMode": "none",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": true,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.0.0",
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "query": "from(bucket: \"electricity\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"meter\")\n  |> filter(fn: (r) => r[\"_field\"] == \"meter_electricity_delivered_by_client_tariff_1\" or r[\"_field\"] == \"meter_electricity_delivered_by_client_tariff_2\" or r[\"_field\"] == \"meter_electricity_delivered_to_client_tariff_1\" or r[\"_field\"] == \"meter_electricity_delivered_to_client_tariff_2\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+                    "refId": "Tariffs"
+                }
+            ],
+            "title": "Energy Consumption",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "influxdb",
+                "uid": "bdoxwke2i8a9se"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "axisSoftMin": 0,
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 15,
+                        "gradientMode": "hue",
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        },
+                        "insertNulls": false,
+                        "lineInterpolation": "stepBefore",
+                        "lineStyle": {
+                            "dash": [
+                                0,
+                                3,
+                                3
+                            ],
+                            "fill": "dot"
+                        },
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "normal"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "dashed"
+                        }
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "watt"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Pac1 SB3000TL-21"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "red",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "displayName",
+                                "value": "Achterkant"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Pac1 SB4000TL-21"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "yellow",
+                                    "mode": "fixed"
+                                }
+                            },
+                            {
+                                "id": "displayName",
+                                "value": "Voorkant"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byFrameRefID",
+                            "options": "Som2"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "mode": "continuous-GrYlRd",
+                                    "seriesBy": "last"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 12,
+                "x": 0,
+                "y": 15
+            },
+            "id": 7,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": true
+                },
+                "tooltip": {
+                    "maxHeight": 600,
+                    "mode": "multi",
+                    "sort": "none"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "query": "from(bucket: \"solar\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"measurement\")\n  |> filter(fn: (r) => r[\"_field\"] == \"Pac1\")\n  |> filter(fn: (r) => r[\"inverter\"] == \"SB4000TL-21\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+                    "refId": "Voorkant"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"solar\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"measurement\")\n  |> filter(fn: (r) => r[\"_field\"] == \"Pac1\")\n  |> filter(fn: (r) => r[\"inverter\"] == \"SB3000TL-21\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+                    "refId": "Achterkant"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": true,
+                    "query": "from(bucket: \"solar\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"measurement\")\n  |> filter(fn: (r) => r[\"_field\"] == \"Pac1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n//group by time to isolate the values you want to sum together\n  |> group(columns: [\"_time\"], mode:\"by\")\n  |> sum(column: \"_value\")\n//to ungroup your data provide a group without any columns\n  |> group()\n  |> yield(name: \"mean\")",
+                    "refId": "Som"
+                }
+            ],
+            "title": "Solar Power production",
+            "type": "timeseries"
+        },
+        {
+            "datasource": {
+                "type": "influxdb",
+                "uid": "bdoxwke2i8a9se"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "axisSoftMin": 0,
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 7,
+                        "gradientMode": "hue",
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        },
+                        "insertNulls": false,
+                        "lineInterpolation": "stepBefore",
+                        "lineStyle": {
+                            "fill": "solid"
+                        },
+                        "lineWidth": 1,
+                        "pointSize": 3,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "mappings": [],
+                    "min": 0,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "watt"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byFrameRefID",
+                            "options": "Active Power"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Active Power"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byFrameRefID",
+                            "options": "Apparent"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Apparent Power"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 9,
+                "x": 12,
+                "y": 15
+            },
+            "id": 5,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": true
+                },
+                "tooltip": {
+                    "maxHeight": 600,
+                    "mode": "multi",
+                    "sort": "none"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "query": "from(bucket: \"APC\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ups\")\n  |> filter(fn: (r) => r[\"_field\"] == \"active_power\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+                    "refId": "Active Power"
+                },
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "hide": false,
+                    "query": "from(bucket: \"APC\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ups\")\n  |> filter(fn: (r) => r[\"_field\"] == \"apparent_power\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+                    "refId": "Apparent"
+                }
+            ],
+            "title": "UPS Power Output",
+            "type": "timeseries"
+        },
+        {
+            "datasource": {
+                "type": "influxdb",
+                "uid": "bdoxwke2i8a9se"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "fieldMinMax": false,
+                    "mappings": [],
+                    "max": 100,
+                    "min": 0,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "percent"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 9,
+                "w": 3,
+                "x": 21,
+                "y": 15
+            },
+            "id": 6,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.0.0",
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "influxdb",
+                        "uid": "bdoxwke2i8a9se"
+                    },
+                    "query": "from(bucket: \"APC\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ups\")\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_percentage\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)",
+                    "refId": "A"
+                }
+            ],
+            "title": "UPS Battery Percentage",
+            "type": "stat"
+        }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 39,
+    "tags": [],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-12h",
+        "to": "now"
+    },
+    "timeRangeUpdatedDuringEditOrView": false,
+    "timepicker": {
+        "refresh_intervals": [
+            "5s"
+        ]
+    },
+    "timezone": "browser",
+    "title": "Fluvius",
+    "uid": "fey2e44gmw3k0d",
+    "version": 43,
+    "weekStart": ""
+}

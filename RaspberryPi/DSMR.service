@@ -1,0 +1,11 @@
+[Unit]
+Description=DSMR Service
+
+[Service]
+ExecStart=/usr/local/bin/DSMR
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/etc/DSMR/config.env
+
+[Install]
+WantedBy=multi-user.target
