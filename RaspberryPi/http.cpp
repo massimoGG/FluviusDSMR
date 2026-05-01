@@ -26,12 +26,12 @@
 #include "http.hpp"
 
 /* Constants */
-constexpr size_t c_HttpTimeout = 1U;
-constexpr size_t c_maxHeaderSize = 512U;
-constexpr size_t c_maxBodySize = 2048U;
+constexpr const size_t c_HttpTimeout = 5U;
+constexpr const size_t c_maxHeaderSize = 512U;
+constexpr const size_t c_maxBodySize = 2048U;
 
 /* Prototypes */
-int checkHTTPCode(char *__restrict__ s);
+int checkHTTPCode(std::string &s);
 int sread(int fd, void *buf, size_t nbytes, int timeout);
 
 struct http_config http_init(const char *host, unsigned short port)
@@ -163,80 +163,75 @@ int http_get(struct http_config *config, const char *uri, const char *token)
         return 0;
     }
 
-    int status_code = checkHTTPCode(response.data());
+    int status_code = checkHTTPCode(response);
 
     return status_code;
 }
 
-/**
- * @returns int status code; 0 (false) on error
- */
+/** @returns int status code; 0 (false) on error */
 int http_post(
-    struct http_config *config, const char *uri, const char *query, const char *token,
-    const char *post_data, int post_length)
+    struct http_config *config, const std::string uri, const std::string query, const std::string token,
+    const std::string postData)
 {
-    std::vector<char> body;
-    body.resize(c_maxBodySize + post_length);
-
-    // Construct the headers
-    size_t bodyLength = sprintf(body.data(), "POST %s?%s HTTP/1.1\r\n"
-                                             "Host: %s:%d\r\n"
-                                             "Connection: keep-alive\r\n"
-                                             "Content-Length: %d\r\n"
-                                             "Authorization: Token %s\r\n\r\n",
-                                uri, query, config->remote_host,
-                                config->remote_port, post_length, token);
-
-    // copy post_data at body_offset
-    memcpy(body.data() + bodyLength, post_data, post_length);
-
-    // Write
-    int nsent = write(config->sockfd, body.data(), body.size());
-    if (nsent <= 0)
     {
-        return 0; // error or closed connection
-    }
+        std::string totalBuffer = "POST " + uri + "?" + query + " HTTP/1.1\r\n";
+        totalBuffer += "Host: " + std::string{config->remote_host} + ":" + std::to_string(config->remote_port) + "\r\n";
+        totalBuffer += "Connection: keep-alive\r\n";
+        totalBuffer += "Content-Length: " + std::to_string(postData.size()) + "\r\n";
+        totalBuffer += "Authorization: Token " + token + "\r\n\r\n";
 
-    // Clear response
-    body.clear();
+        /* copy post_data at offset due to header */
+        totalBuffer += postData;
 
-    // read response
-    size_t read_len = 0;
-    do
-    {
-        read_len += sread(config->sockfd, body.data() + read_len, c_maxBodySize, c_HttpTimeout);
-
-        // If response is bigger than buffer
-        if (read_len % c_maxBodySize == 0)
+        // Write
+        int nsent = write(config->sockfd, totalBuffer.data(), totalBuffer.size());
+        if (nsent <= 0)
         {
-            body.resize(body.capacity() + c_maxBodySize);
+            return 0; // error or closed connection
         }
-    } while (read_len >= c_maxBodySize);
-
-    if (read_len <= 0)
-    {
-        return 0;
     }
 
-    int status_code = checkHTTPCode(body.data());
+    /* read response */
+    {
+        std::string reply;
+        reply.resize(c_maxBodySize);
 
-    return status_code;
+        int retRead = 0;
+        do
+        {
+            reply.resize(reply.size() + c_maxBodySize);
+
+            char *dst = reply.data() + reply.size() - c_maxBodySize;
+            int retRead = sread(config->sockfd, dst, c_maxBodySize, c_HttpTimeout);
+            if (retRead <= 0)
+            {
+                return 0;
+            }
+
+            /* Shrink */
+            reply.resize(reply.size() - c_maxBodySize + retRead);
+
+        } while (retRead % c_maxBodySize != 0);
+
+        int status_code = checkHTTPCode(reply);
+
+        return status_code;
+    }
 }
 
 /**
  * checkHTTPCode parses the given HTTP response string and extracts the HTTP code
  * @returns HTTP code
  */
-int checkHTTPCode(char *__restrict__ s)
+int checkHTTPCode(std::string &str)
 {
     // HTTP/1.1 401 Unauthorized or HTTP/1.1 200 OK
-    int httpcode;
-    char *token;
-    token = strtok(s, " ");
-    token = strtok(NULL, " ");
-    httpcode = atoi(token);
+    size_t firstSpace = str.find(" ");
+    size_t secondSpace = str.find(" ", firstSpace + 1);
 
-    return httpcode;
+    std::string code = str.substr(firstSpace, secondSpace - firstSpace);
+
+    return atoi(code.c_str());
 }
 
 /// @brief Block reads from fd for timeout seconds

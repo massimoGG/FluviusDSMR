@@ -8,6 +8,8 @@
 #include <locale.h>
 #include <errno.h>
 
+#include "common.h"
+
 /**
  * setupLogs sets up the locale of the user terminal
  */
@@ -22,14 +24,18 @@ void setupLogs(void)
  */
 void printErrno(const char *prefix, const char *format, ...)
 {
-    // Fetch errno value
-    int errsv = errno;
-    va_list va;
-    va_start(va, format);
+    va_list args;
+
     fprintf(stderr, "%s:\t", prefix);
-    vfprintf(stderr, format, va);
+
+    // Fetch errno value
+    const int errsv = errno;
+
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+
     fprintf(stderr, "\n\terrno %d: %s\n\n", errsv, strerror(errsv));
-    va_end(va);
 }
 /**
  * printLog prints the given prefix and format using variable arguments
@@ -37,16 +43,18 @@ void printErrno(const char *prefix, const char *format, ...)
 void _printLog(FILE *f, const char *prefix, const char *format, ...)
 {
     va_list va;
-    va_start(va, format);
     fprintf(f, "%s:\t", prefix);
+
+    va_start(va, format);
     vfprintf(f, format, va);
-    fprintf(f, "\n");
     va_end(va);
+
+    fprintf(f, "\n");
 }
 
-int getByToken(char *line, int lineLength, int offset, char token)
+size_t getByToken(const char *line, size_t lineLength, int offset, char token)
 {
-    for (int i = offset; i < lineLength; i++)
+    for (size_t i = offset; i < lineLength; i++)
     {
         if (line[i] == token)
             return i;
@@ -54,9 +62,9 @@ int getByToken(char *line, int lineLength, int offset, char token)
     return lineLength;
 }
 
-void printNum(char *str, int num)
+void printNum(const char *str, int num)
 {
-    for (int i=0;i<num;i++)
-        printf("%c",str[i]);
+    for (int i = 0; i < num; i++)
+        printf("%c", str[i]);
     printf("\n");
 }

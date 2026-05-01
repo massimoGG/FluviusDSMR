@@ -10,64 +10,53 @@
 #include <stdlib.h> // For exit
 #include <string.h>
 
-// for dirent
-#include <sys/types.h>
-#include <dirent.h>
+#include <type_traits>
+#include <functional>
 
-#include <unistd.h>  // write, read, close
-#include <fcntl.h>   // for O_RWDR etc
-#include <termios.h> // for terminal attributes
 // #include <sys/ioctl.h> // ioctl for exclusive access
-
+#include <sys/types.h>
 #include <sys/select.h>
+#include <dirent.h>
 #include <time.h>
 
 #include "common.h"
+#include "tty.hpp"
 
 /**
  * findAndOpenTTYUSB finds the first available ttyUSB in /dev
  * @returns int file descriptor to first /dev/ttyUSB*
  */
-int findAndOpenTTYUSB(void)
+std::unique_ptr<Tty> findAndOpenTTYUSB(void)
 {
-    /**
-     * Find first available ttyUSB*
-     */
-    DIR *dev_dp = opendir("/dev/");
-    if (dev_dp == NULL)
+    /* Find first available ttyUSB* */
+    auto dir = std::unique_ptr<DIR, std::function<void(DIR *)>>(opendir("/dev/"), [](DIR *d)
+                                                                { if (d) {closedir(d);} });
+    if (!dir)
     {
         printErrno(__func__, "Could not open /dev");
-        return -1;
+        return nullptr;
     }
 
     struct dirent *ep;
     int ttyNum = -1;
-    while ((ep = readdir(dev_dp)))
+    while ((ep = readdir(dir.get())))
     {
         sscanf(ep->d_name, "ttyUSB%d", &ttyNum);
         if (ttyNum >= 0)
             break;
     }
-    if (ttyNum == -1)
+
+    if (ttyNum < 0)
     {
         printErrno(__func__, "Could not find a suitable TTYUSB*");
-        return -1;
+        return nullptr;
     }
     // Construct complete path
-    char ttyPath[16]; // Plenty of enough room
+    char ttyPath[32];
     sprintf(ttyPath, "/dev/ttyUSB%d", ttyNum);
     printLog(__func__, "Using %s", ttyPath);
 
-    // Now let's try to open it
-    int ttyfd;
-    ttyfd = open(ttyPath, O_RDONLY | O_NOCTTY); //| O_NDELAY);
-    if (ttyfd == -1)
-    {
-        printErrno(__func__, "Could not fopen TTY!");
-        return -1;
-    }
-
-    return ttyfd;
+    return (std::make_unique<Tty>(ttyPath));
 }
 
 /**
@@ -82,10 +71,10 @@ intr = ^C; quit = ^\; erase = ^?; kill = ^U; eof = ^D; eol = <undef>; eol2 = <un
 -opost -olcuc -ocrnl -onlcr -onocr -onlret -ofill -ofdel nl0 cr0 tab0 bs0 vt0 ff0
 -isig -icanon iexten -echo echoe echok -echonl -noflsh -xcase -tostop -echoprt echoctl echoke -flusho -extproc
  */
-int setupTTY(int ttyfd)
+int setupTTY(Tty *tty)
 {
-    printLog(__func__, "Setting up terminal %d", ttyfd);
-    if (!isatty(ttyfd))
+    printLog(__func__, "Setting up terminal %d", tty->getFd());
+    if (!isatty(tty->getFd()))
     {
         printErrno(__func__, "Given ttyfd is not a TTY!");
         return -1;
@@ -93,7 +82,7 @@ int setupTTY(int ttyfd)
 
     struct termios config;
     // fetch current termios config
-    if (tcgetattr(ttyfd, &config) == -1)
+    if (tcgetattr(tty->getFd(), &config) == -1)
     {
         // erno is set
         printErrno(__func__, "Failed to get terminal interface config");
@@ -103,8 +92,8 @@ int setupTTY(int ttyfd)
     /**
      * Input flags - Turn off input processing
      */
-    config.c_iflag &= ~(IGNBRK | ICRNL | IGNCR | INLCR | PARMRK | INPCK | ISTRIP | IXOFF | IUCLC | IXANY | IMAXBEL | IUTF8);
-    config.c_iflag = (BRKINT | IGNPAR | IXON);
+    config.c_iflag &= ~(IGNBRK | ICRNL | INLCR | PARMRK | INPCK | ISTRIP | IXOFF | IUCLC | IXANY | IMAXBEL | IUTF8);
+    config.c_iflag = (BRKINT | IGNPAR | IXON | IGNCR);
 
     /**
      * Output flags - Turn off output processing
@@ -153,7 +142,7 @@ int setupTTY(int ttyfd)
     }
 
     // Apply the configuration
-    if (tcsetattr(ttyfd, TCSANOW, &config) == -1)
+    if (tcsetattr(tty->getFd(), TCSANOW, &config) == -1)
     {
         printErrno(__func__, "Couldn't set TTYconfig");
         return -1;
@@ -167,35 +156,27 @@ int setupTTY(int ttyfd)
     // }
 
     printLog(__func__, "Successfully setup TTY");
-    return ttyfd;
-}
-
-/**
- * closeTTY closes the given TTY FD
- * @returns whatever close() returns on the fd
- */
-int closeTTY(int ttyfd)
-{
-    return close(ttyfd);
+    return 0;
 }
 
 /**
  * readTTY reads whatever comes into the TTY and updates the given buffer up to bufferlength
  * @returns (negative) error code if any or (positive) data length
  */
-int readTTY(int ttyfd, char *buffer, size_t bufferlength)
+int readTTY(Tty *tty, std::span<char> data)
 {
 
     struct timeval tv =
         {
             .tv_sec = 2,
+            .tv_usec = 0,
         };
     // Init FD set
     fd_set fds;
     FD_ZERO(&fds);
-    FD_SET(ttyfd, &fds);
+    FD_SET(tty->getFd(), &fds);
 
-    int ret = select(ttyfd + 1, &fds, NULL, NULL, &tv);
+    int ret = select(tty->getFd() + 1, &fds, NULL, NULL, &tv);
     if (ret < 0)
     {
         printErrno(__func__, "select failed");
@@ -203,12 +184,9 @@ int readTTY(int ttyfd, char *buffer, size_t bufferlength)
     }
     if (ret == 0)
     {
-        printLog(__func__, "Timeout");
+        printError(__func__, "Timeout");
         return ret;
     }
 
-    int n = read(ttyfd, buffer, bufferlength);
-    // Set 0 to last character to remove the '\n'
-    buffer[n - 2] = 0;
-    return n - 1;
+    return read(tty->getFd(), data.data(), data.size());
 }

@@ -5,27 +5,29 @@
 #include <exception>
 #include <string>
 #include <vector>
+#include <span>
 
 #include "http.hpp"
 #include "influx.hpp"
+#include "tty.hpp"
 
-extern "C"
-{
+#include "DSMR.hpp"
+
 #include "common.h"
-#include "tty.h"
-#include "DSMR.h"
-}
 
 /* Constants */
+/** Length of DSMR line */
+constexpr size_t c_DsmrLineLength = 512U;
+
 /** line-protocol buffer */
 constexpr size_t c_LineBufferSize = 2048U;
 
 /* Prototypes */
-int run(int ttyfd, struct influx_config *iconfig);
+int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig);
 void ErrorHandler(void);
 
 /* Public functions */
-int main(const int , char *[])
+int main(const int, char *[])
 {
     using namespace std;
 
@@ -39,18 +41,17 @@ int main(const int , char *[])
     const char *organisation = getenv("INFLUX_ORG");
     const char *bucket = getenv("INFLUX_BUCKET");
 
-    if ((host == nullptr)|| (token == nullptr) || (organisation == nullptr) || (bucket == nullptr))
+    if ((host == nullptr) || (token == nullptr) || (organisation == nullptr) || (bucket == nullptr))
     {
         printError(__func__, "Environment variables missing!");
 
         exit(EXIT_FAILURE);
     }
 
-
     /* TTY Setup */
     printLog(__func__, "Finding available TTY");
-    int ttyfd = findAndOpenTTYUSB();
-    if (ttyfd == -1)
+    std::unique_ptr<Tty> tty = findAndOpenTTYUSB();
+    if (!tty)
     {
         printError(__func__, "Can't find suitable TTY");
         exit(EXIT_FAILURE);
@@ -59,8 +60,7 @@ int main(const int , char *[])
     /* At this point, we found a suitable TTYUSB* and opened it
      * Now setup termios attributes */
     printLog(__func__, "Setting up TTY");
-    ttyfd = setupTTY(ttyfd);
-    if (ttyfd == -1)
+    if (setupTTY(tty.get()))
     {
         printError(__func__, "Can't setup TTY");
         exit(EXIT_FAILURE);
@@ -85,71 +85,81 @@ int main(const int , char *[])
     if (!influx_connect(&iconfig))
     {
         printError(__func__, "Couldn't connect to server");
-        goto cleanup;
+        exit(EXIT_FAILURE);
     }
 
     if (!influx_authenticate(&iconfig))
     {
         printError(__func__, "Couldn't authenticate Influx connection");
-        goto cleanup;
+        exit(EXIT_FAILURE);
     }
 
-    run(ttyfd, &iconfig);
-
-cleanup:
-    // Cleanup
-    closeTTY(ttyfd);
+    run(std::move(tty), &iconfig);
 
     return EXIT_FAILURE;
 }
 
-int run(int ttyfd, struct influx_config *iconfig)
+int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig)
 {
-    int ret = 0;
+    /* Temporary buffer for DSMR line */
+    std::string totalBuffer{""};
 
-    /* Line protocol handling */
-    constexpr size_t bufferLength = 128U;
-    std::string lineBuffer;
-    lineBuffer.resize(bufferLength);
-
-    int readBytes;
-
-    std::vector<char> influxBuffer;
-    influxBuffer.resize(c_LineBufferSize);
-
-    int totalOffset = 0, offset = 0;
+    /* Total buffer to send to Influx */
+    std::string influxBuffer{""};
 
     for (;;)
     {
-        readBytes = readTTY(ttyfd, lineBuffer.data(), bufferLength);
-        if (readBytes < 0)
+        /* Current Line handling */
+        std::string tempData;
         {
-            printErrno(__func__, "readTTY returned a fatal response!");
-            // Fatal
-            return -1;
+            tempData.resize(c_DsmrLineLength);
+            const int readBytes = readTTY(tty.get(), {tempData.data(), tempData.size()});
+            if (readBytes < 0)
+            {
+                printErrno(__func__, "readTTY returned a fatal response!");
+                return -1;
+            }
+
+            /* Resize string to exact number of received bytes */
+            tempData.resize(readBytes);
+
+            /* Append data to the global buffer */
+            totalBuffer += tempData;
         }
-        // TODO:  Maybe a function that resets the DSMR if detecting '/FLU5'
-        // If it's not the !CRC, decode line
-        offset = decodeLine(influxBuffer.data() + totalOffset, lineBuffer.data(), readBytes);
-        totalOffset += offset;
 
-        if (lineBuffer[0] == '!')
+        /* If there's no new line in buffer, continue reading from TTY */
+        if (!totalBuffer.contains('\n'))
         {
-            // If line contains the !CRC -> send to Influx
-            // Remove last comma
-            influxBuffer[totalOffset - 1] = 0;
-            influxBuffer.resize(totalOffset);
+            continue;
+        }
 
-            printLog(__func__, "Encoded DSMR: '%*.s'", influxBuffer.data(),influxBuffer.size());
+        /* At this point, we got a new line in our buffer! */
+        /* Take the string and remove from dsmrBuffer */
+        size_t newLineIndex = totalBuffer.find('\n');
+        std::string dsmrLine = totalBuffer.substr(0, newLineIndex);
 
-            ret = influx_write_DSMR(iconfig, influxBuffer.data(), totalOffset);
-            if (!ret)
-                printError(__func__, "Writing data to InfluxDB failed: (%dbytes) '%s'", totalOffset, influxBuffer);
-            // TODO: After x amount of failures, exit with failure?
+        decodeLine(influxBuffer, dsmrLine);
 
-            // clear influxBuffer
+        /* Remove dsmrLine +1(for new Line) from totalBuffer */
+        totalBuffer.erase(0, newLineIndex + 1);
+
+        /* If line begins with '!' -> END of Frame -> Clear everything */
+        if (dsmrLine.contains('!'))
+        {
+#if DEBUG
+            printf("InfluxBuffer: %s\n\n", influxBuffer.c_str());
+#endif
+            /* Remove the last ',' because influx doesn't like that */
+            influxBuffer.pop_back();
+
+            /* Post everything to Influx */
+
+            if (!influx_write_DSMR(iconfig, influxBuffer))
+            {
+                printError(__func__, "Writing data to InfluxDB failed '%s'", influxBuffer.c_str());
+            }
+
             influxBuffer.clear();
-            totalOffset = 0;
         }
     }
 }

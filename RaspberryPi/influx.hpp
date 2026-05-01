@@ -2,6 +2,7 @@
 #define INFLUX_H
 
 #include "http.hpp"
+#include <string>
 
 typedef struct influx_config
 {
@@ -19,7 +20,7 @@ struct influx_config influx_init(
 
 int influx_connect(struct influx_config *config);
 int influx_authenticate(struct influx_config *config);
-int influx_write_DSMR(influx_config_t *config, const char *line, int lineLength);
+int influx_write_DSMR(influx_config_t *config, std::string line);
 
 time_t convertTimestamp(const char *line);
 

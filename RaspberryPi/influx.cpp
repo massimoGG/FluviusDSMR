@@ -10,6 +10,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <string>
+#include <vector>
+#include <span>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -60,30 +62,24 @@ int influx_authenticate(struct influx_config *config)
  * Performs HTTP POST Query with token and Line protocol data
  * @returns 0 if unsuccessfull HTTP response or malloc error; or the HTTP statuscode
  */
-int influx_write_DSMR(influx_config_t *config, const char *line, int lineLength)
+int influx_write_DSMR(influx_config_t *config, std::string line)
 {
-    // Prepary URIQuery
-    std::string query;
-    query.resize(128U);
+    /* Query */
+    const std::string query = "bucket=" + std::string{config->bucket} + "&org=" + std::string{config->organization} + "&precision=s";
 
-    sprintf(query.data(), "bucket=%s&org=%s&precision=s",
-            config->bucket, config->organization);
+    const std::string measurement = "meter";
 
-    const char *measurement = "meter";
-    time_t t = convertTimestamp(line);
+    time_t time = convertTimestamp(line.c_str());
 
-    // Prepare Influx body
-    std::string body;
-    body.resize(lineLength * 2);
+    /* Body */
+    std::string body = measurement + " " + line.substr(23) + " " + std::to_string(time);
 
-    // +23 to remove the timestamp=,
-    size_t bodyLength = sprintf(body.data(), "%s %s %ld", measurement, line + 23, t);
-
-    int ret = http_post(&(config->httpConfig), "/api/v2/write", query.data(), config->token,
-                        body.data(), bodyLength);
+    int ret = http_post(&(config->httpConfig), "/api/v2/write", query, config->token,
+                        body);
 
     return ret;
 }
+
 /**
  * Converts meter timestamp=YYMMDDhhmmssX to Unix timestamp
  * Assuming the first element is timestamp

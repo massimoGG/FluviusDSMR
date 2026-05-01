@@ -1,26 +1,26 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#ifdef __cplusplus
+#if __cplusplus
 extern "C"
 {
 #endif
 
-#include <stdio.h>
+#include <stdio.h> // For printf
+#include <stdarg.h>
 
     void setupLogs(void);
     void printErrno(const char *prefix, const char *format, ...);
 
     void _printLog(FILE *f, const char *prefix, const char *format, ...);
 
-#define printError(...) _printLog(stderr, __VA_ARGS__)
-#define printLog(...) _printLog(stdout, __VA_ARGS__)
-
-    int getByToken(char *line, int lineLength, int offset, char token);
-    void printNum(char *str, int num);
-
-#ifdef __cplusplus
+    size_t getByToken(const char *line, size_t lineLength, int offset, char token);
+    void printNum(const char *str, int num);
+#if __cplusplus
 }
 #endif
+
+#define printError(...) _printLog(stderr, __VA_ARGS__)
+#define printLog(...) _printLog(stdout, __VA_ARGS__)
 
 #endif

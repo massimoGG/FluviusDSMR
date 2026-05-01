@@ -1,6 +1,8 @@
 #ifndef HTTP_H
 #define HTTP_H
 
+#include <string>
+
 struct http_config
 {
     int sockfd;
@@ -18,8 +20,8 @@ struct http_response
 
 struct http_config http_init(const char *host, unsigned short port);
 int http_connect(struct http_config *config);
-int http_get(struct http_config *config, const char *uri,const char *token);
-int http_post(struct http_config *config, const char *uri, const char *query, const char *token,
-              const char *post_data, int post_length);
+int http_get(struct http_config *config, const char *uri, const char *token);
+int http_post(struct http_config *config, const std::string uri, const std::string query, const std::string token,
+              const std::string postData);
 
 #endif
