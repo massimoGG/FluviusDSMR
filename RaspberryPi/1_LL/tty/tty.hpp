@@ -1,8 +1,10 @@
 #ifndef TTY_H
 #define TTY_H
 
+#include "lib/error_codes.h"
 #include <memory>
 #include <span>
+#include <optional>
 
 // for dirent
 #include <sys/types.h>
@@ -44,8 +46,21 @@ private:
     int m_fd {-1};
 };
 
+class LineReader {
+public:
+    LineReader() = delete;    
+    explicit LineReader(Tty &tty);
+
+    std::string read(void);
+
+private:
+    Tty &m_tty;
+
+    std::string m_buffer;
+};
+
 std::unique_ptr<Tty> findAndOpenTTYUSB(void);
-int setupTTY(Tty*);
+error_e setupTTY(Tty*);
 int readTTY(Tty*, std::span<char> data);
 
 #endif

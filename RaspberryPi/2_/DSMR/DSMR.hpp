@@ -55,6 +55,6 @@
  * (Carriage Return / Line Feed).
  */
 
-error_e decodeLine(influx::InfluxLine &dest, std::string &line);
+error_e decodeLine(influx::InfluxLine &dest, const std::string &line);
 
 #endif

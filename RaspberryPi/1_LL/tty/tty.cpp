@@ -6,6 +6,7 @@
  * - https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/
  * - https://en.wikibooks.org/wiki/Serial_Programming/termios
  */
+#include <optional>
 #include <stdio.h>  // For printf
 #include <stdlib.h> // For exit
 #include <string.h>
@@ -20,6 +21,47 @@
 #include <lib/debug.h>
 #include <lib/error_codes.h>
 #include "tty.hpp"
+
+/** Length of DSMR line */
+constexpr size_t c_DsmrLineLength = 512U;
+
+LineReader::LineReader(Tty &tty) : m_tty(tty) {};
+
+/**
+ * @brief keeps reading from the TTY, buffers excess data, extracts a line 
+ */
+std::string LineReader::read(void)
+{
+    std::string line{};
+
+    while (1) {
+        line.clear();
+        line.resize(c_DsmrLineLength);
+
+        const int readBytes = readTTY(&m_tty, std::span{line.data(), line.size()});
+        if (readBytes < 0)
+        {
+            DBG_ERR( "readTTY returned a fatal response!");
+            return "";
+        }
+    
+        /* Resize string to exact number of received bytes */
+        line.resize(readBytes);
+        m_buffer += line;
+
+        if (m_buffer.contains('\n'))
+        {
+            /* Extract line */
+            const size_t newlineIndex = m_buffer.find('\n');
+            const std::string totalLine = m_buffer.substr(0, newlineIndex);
+
+            /* Remove the line and the newline */
+            m_buffer.erase(0, newlineIndex + 1);
+
+            return totalLine;
+        }
+    }
+}
 
 /**
  * findAndOpenTTYUSB finds the first available ttyUSB in /dev
@@ -70,13 +112,13 @@ intr = ^C; quit = ^\; erase = ^?; kill = ^U; eof = ^D; eol = <undef>; eol2 = <un
 -opost -olcuc -ocrnl -onlcr -onocr -onlret -ofill -ofdel nl0 cr0 tab0 bs0 vt0 ff0
 -isig -icanon iexten -echo echoe echok -echonl -noflsh -xcase -tostop -echoprt echoctl echoke -flusho -extproc
  */
-int setupTTY(Tty *tty)
+error_e setupTTY(Tty *tty)
 {
     DBG_INFO("Setting up terminal %d", tty->getFd());
     if (!isatty(tty->getFd()))
     {
         DBG_ERR("Given ttyfd is not a TTY!");
-        return -1;
+        return eError_failed;
     }
 
     struct termios config;
@@ -85,7 +127,7 @@ int setupTTY(Tty *tty)
     {
         // erno is set
         DBG_ERR("Failed to get terminal interface config");
-        return -1;
+        return eError_failed;
     }
 
     /**
@@ -131,20 +173,20 @@ int setupTTY(Tty *tty)
     if (cfsetospeed(&config, B115200) == -1)
     {
         DBG_ERR("Couldn't set output speed of TTY");
-        return -1;
+        return eError_failed;
     }
     // set ispeed to 0, which matches the ospeed
     if (cfsetispeed(&config, B115200) == -1)
     {
         DBG_ERR("Couldn't set input speed of TTY");
-        return -1;
+        return eError_failed;
     }
 
     // Apply the configuration
     if (tcsetattr(tty->getFd(), TCSANOW, &config) == -1)
     {
         DBG_ERR( "Couldn't set TTYconfig");
-        return -1;
+        return eError_failed;
     }
 
     // Setup exclusive access to terminal
@@ -154,8 +196,8 @@ int setupTTY(Tty *tty)
     // return -1;
     // }
 
-    DBG_ERR( "Successfully setup TTY");
-    return 0;
+    DBG_INFO("Successfully setup TTY");
+    return eError_ok;
 }
 
 /**

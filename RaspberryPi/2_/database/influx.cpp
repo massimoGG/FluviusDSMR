@@ -4,10 +4,10 @@
  */
 #include <curl/curl.h>
 #include <curl/easy.h>
-#include <iostream>
 #include <cassert>
 #include <cstring> // memset
 #include <string>
+#include <string_view>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -16,7 +16,8 @@
 #include <netdb.h>
 
 #include "influx.hpp"
-#include "lib/error_codes.h"
+#include <lib/debug.h>
+#include <lib/error_codes.h>
 
 namespace influx {
 
@@ -31,26 +32,20 @@ const unsigned int Influx::s_bufsize = 8196;
 
 Influx::Influx(const std::string &host, const std::string &org, const std::string &bucket, const std::string &token)
 {
-    m_url = host + 
-        std::string("/api/v2/write?bucket=") + bucket + 
-        std::string("&org=") + org + 
-        std::string("&precision=s");
-    std::cout << "URL: " << m_url << "\n";
-
-    configCurl(token);
+    Influx(host, 8086, org, bucket, token);
 }
 
 Influx::Influx(const std::string &host, const unsigned short port, const std::string &org, const std::string &bucket, const std::string &token)
 {
     /* Configure Curl Host -> POST /api/v2/write?bucket=%s&org=%s&precision=s*/
     /** @warning curl guesses the scheme unless we explicitely pass it */
-    m_url = host + ':' + std::to_string(port) + 
+    m_url = std::string("http://") + host + ':' + std::to_string(port) + 
         std::string("/api/v2/write?bucket=") + bucket + 
         std::string("&org=") + org + 
         std::string("&precision=s");
-    std::cout << "URL: " << m_url << "\n";
+    DBG_DBG("URL: %s", m_url.c_str());
 
-    configCurl(token);
+    assert(eError_ok == configCurl(token));
 }
 
 error_e Influx::configCurl(const std::string &token)
@@ -70,6 +65,8 @@ error_e Influx::configCurl(const std::string &token)
 
     /* Set timeout */
     curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 1);
+
+    DBG_DBG("Configured CURL");
 
     return eError_ok;
 }
@@ -92,12 +89,15 @@ error_e Influx::post(const std::string &data)
 {
     using namespace std;
 
-    if (nullptr == m_curl){
+    if (nullptr == m_curl)
+    {
         return eError_invalid;
     }
 
-    curl_easy_setopt(m_curl, CURLOPT_POSTFIELDS, data.c_str());
-
+    const char *postData = data.c_str();
+    DBG_DBG("data: '%s'", postData);
+    curl_easy_setopt(m_curl, CURLOPT_POSTFIELDS, postData);
+    DBG_DBG("performing");
     const CURLcode ret = curl_easy_perform(m_curl);
     if (CURLE_OPERATION_TIMEDOUT == ret) {
         return eError_timeout;
@@ -112,8 +112,10 @@ error_e Influx::post(const std::string &data)
             return eError_ok;
         }
 
-        printf("HTTP Code: %ld\n", http_code);
+        DBG_DBG("HTTP Code: %ld", http_code);
     }
+
+    DBG_DBG("CURL ERROR: %ld", ret);
 
     return eError_failed;
 }

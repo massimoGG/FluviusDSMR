@@ -47,7 +47,7 @@ public:
 
     InfluxLine &setTimestamp(const unsigned long long time);
 
-    std::string getLine(void);
+    const std::string &getLine(void);
 
 private:
     using kv = std::pair<std::string, std::string>;
@@ -66,6 +66,8 @@ private:
 
     /* Current timestamp */
     std::string m_timestamp;
+
+    std::string m_buffer;
 };
 
 };

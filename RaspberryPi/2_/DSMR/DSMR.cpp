@@ -7,7 +7,8 @@
 
 #include <2_/database/influxline.hpp>
 #include "DSMR.hpp"
-#include "lib/error_codes.h"
+#include <lib/debug.h>
+#include <lib/error_codes.h>
 
 static time_t convertTimestamp(const char *line);
 
@@ -32,7 +33,8 @@ public:
     void parse(influx::InfluxLine &dest, std::string &line)
     {
         /* Parse from 'S' or 'W' */
-        const std::string timestamp = line.substr(1, line.find_first_of("SW")-1);
+        const std::string timestamp = line.substr(1, line.find_first_of("SW") - 1);
+        
         dest.setTimestamp(convertTimestamp(timestamp.c_str()));
     }
 
@@ -121,7 +123,9 @@ public:
     void parse(influx::InfluxLine &dest, std::string &line)
     {
         const std::size_t l = line.find('*');
-        dest.addField(m_title, std::stof(line.substr(1, l - 1)));
+        const std::string &value = line.substr(1, l - 1);
+
+        dest.addField(m_title, std::stof(value));
     }
 
     const std::string &getTitle(void) {
@@ -171,7 +175,7 @@ static const std::array<oidElem_t, 15>
  *  result is a 4 hexadecimal character (MSB first)
  * @returns offset of dstLineBuffer
  */
-error_e decodeLine(influx::InfluxLine &dest, std::string &line)
+error_e decodeLine(influx::InfluxLine &dest, const std::string &line)
 {
     /* First decode (key) */
     /* Find first '(' */
@@ -194,8 +198,6 @@ error_e decodeLine(influx::InfluxLine &dest, std::string &line)
         {
             /* Parse the line from the meter */
             p.second->parse(dest, oidValue);
-            
-            std::cout << "parsed: " << p.second->getTitle() << " = '" << oidValue << "'\n";
 
             return eError_ok;
         }
@@ -210,12 +212,11 @@ error_e decodeLine(influx::InfluxLine &dest, std::string &line)
  * //250914143330S
  * //25Y 09M 14d 14h 33m 30s
  */
-static time_t convertTimestamp(const char *line)
+static time_t convertTimestamp(const char *ts)
 {
     char year[3], month[3], day[3], hour[3], minute[3], second[3];
 
     // Extract components from the timestamp
-    const char *ts = line + 10;
     strncpy(year, ts, 2);
     year[2] = '\0';
     strncpy(month, ts + 2, 2);

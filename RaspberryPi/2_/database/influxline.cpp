@@ -87,26 +87,26 @@ InfluxLine &InfluxLine::setTimestamp(const unsigned long long time)
  * @brief constructs the LineProtocol line
  * @return const std::string&
  */
-std::string InfluxLine::getLine(void)
+const std::string &InfluxLine::getLine(void)
 {
-    std::string ret{};
+    m_buffer.clear();
 
     /* Begin with  Measurement */
-    ret += m_measurement + " ";
+    m_buffer += m_measurement + " ";
 
     /* Append tags if any set */
     if (m_tags.size())
     {
-        ret += getTags() + " ";
+        m_buffer += getTags() + " ";
     }
 
     /* Append fields */
-    ret += getFields();
+    m_buffer += getFields();
 
     /* Append timestamp */
-    ret += " " + m_timestamp;
+    m_buffer += " " + m_timestamp;
 
-    return ret;
+    return m_buffer;
 }
 
 };
