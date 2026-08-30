@@ -9,11 +9,15 @@
 #include <vector>
 #include <utility>
 
+namespace influx {
+
 /** @brief Influx LineProtocol wrapper */
 class InfluxLine
 {
 public:
     explicit InfluxLine(const std::string &name);
+
+    void clear(void);    
 
     InfluxLine &addTag(const std::string tagKey, const std::string tagValue);
 
@@ -62,6 +66,8 @@ private:
 
     /* Current timestamp */
     std::string m_timestamp;
+};
+
 };
 
 #endif

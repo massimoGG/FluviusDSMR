@@ -1,7 +1,9 @@
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
+#include <iostream>
 
-#include <lib/common.h>
+#include <lib/debug.h>
 #include <lib/error_codes.h>
 
 #include <1_LL/tty/tty.hpp>
@@ -30,8 +32,6 @@ int main(const int, char *[])
 {
     using namespace std;
 
-    setupLogs();
-
     config_t config {};
     if (eError_ok != getConfig(config)) {
         exit(EXIT_FAILURE);
@@ -41,7 +41,7 @@ int main(const int, char *[])
     std::unique_ptr<Tty> tty = findAndOpenTTYUSB();
     if (!tty)
     {
-        printError(__func__, "Can't find suitable TTY");
+        DBG_ERR( "Can't find suitable TTY");
         exit(EXIT_FAILURE);
     }
 
@@ -49,7 +49,7 @@ int main(const int, char *[])
      * Now setup termios attributes */
     if (setupTTY(tty.get()))
     {
-        printError(__func__, "Can't setup TTY");
+        DBG_ERR("Can't setup TTY");
         exit(EXIT_FAILURE);
     }
 
@@ -70,7 +70,7 @@ static error_e getConfig(config_t &config)
 
     if ((config.host == nullptr) || (config.token == nullptr) || (config.organisation == nullptr) || (config.bucket == nullptr))
     {
-        printError(__func__, "Environment variables missing!");
+        DBG_ERR("Environment variables missing!");
 
         return eError_failed;    
     }
@@ -80,14 +80,16 @@ static error_e getConfig(config_t &config)
 
 static int app_run(std::unique_ptr<Tty> tty, influx::Influx &ifx)
 {
+
     /* Temporary buffer for DSMR line */
     std::string totalBuffer{""};
 
-    /* Total buffer to send to Influx */
-    std::string influxBuffer{""};
-
+    /* Current fetched values */
+    influx::InfluxLine currentLine("meter");
+    
     for (;;)
     {
+
         /* Current Line handling */
         {
             std::string tempData;
@@ -96,7 +98,7 @@ static int app_run(std::unique_ptr<Tty> tty, influx::Influx &ifx)
             const int readBytes = readTTY(tty.get(), {tempData.data(), tempData.size()});
             if (readBytes < 0)
             {
-                printErrno(__func__, "readTTY returned a fatal response!");
+                DBG_ERR( "readTTY returned a fatal response!");
                 return -1;
             }
 
@@ -118,7 +120,7 @@ static int app_run(std::unique_ptr<Tty> tty, influx::Influx &ifx)
         size_t newLineIndex = totalBuffer.find('\n');
         std::string dsmrLine = totalBuffer.substr(0, newLineIndex);
 
-        decodeLine(influxBuffer, dsmrLine);
+        decodeLine(currentLine, dsmrLine);
 
         /* Remove dsmrLine +1(for new Line) from totalBuffer */
         totalBuffer.erase(0, newLineIndex + 1);
@@ -126,19 +128,17 @@ static int app_run(std::unique_ptr<Tty> tty, influx::Influx &ifx)
         /* If line begins with '!' -> END of Frame -> Clear everything */
         if (dsmrLine.contains('!'))
         {
-#if DEBUG
-            printf("InfluxBuffer: %s\n\n", influxBuffer.c_str());
-#endif
-            /* Remove the last ',' because influx doesn't like that */
-            influxBuffer.pop_back();
+            const std::string finalLine = currentLine.getLine();
+
+            std::cout << "Publishing line '" << finalLine << "'" << "\n";
 
             /* Post everything to Influx */
-            if (ifx.post(influxBuffer))
+            if (ifx.post(finalLine))
             {
-                printError(__func__, "Writing data to InfluxDB failed '%s'", influxBuffer.c_str());
+                DBG_ERR( "Writing data to InfluxDB failed '%s'", finalLine.c_str());
             }
 
-            influxBuffer.clear();
+            currentLine.clear();
         }
     }
 }

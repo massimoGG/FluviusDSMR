@@ -20,7 +20,7 @@ add_executable(DSMR
     "2_/database/influxline.cpp"
     "2_/DSMR/DSMR.cpp"
 
-    "lib/common.c"
+    "lib/debug.c"
 
     main.cpp
 )

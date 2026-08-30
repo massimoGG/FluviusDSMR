@@ -1,19 +1,23 @@
 #include <array>
 #include <cstring>
-#include <memory>
+#include <ctime>
 #include <utility>
 
-#include <lib/common.h>
+#include <iostream>
+
+#include <2_/database/influxline.hpp>
 #include "DSMR.hpp"
+#include "lib/error_codes.h"
+
+static time_t convertTimestamp(const char *line);
 
 class OID_itf
 {
 public:
     /** @brief Parses the given \p line */
-    virtual void parse(std::string &line) = 0;
-    
-    /** @brief Gets an Influx readable */
-    virtual std::string get(void) = 0;
+    virtual void parse(influx::InfluxLine &dest, std::string &line) = 0;
+
+    virtual const std::string &getTitle(void) = 0;
 };
 
 /**
@@ -25,20 +29,19 @@ class Timestamp : public OID_itf
 public:
     Timestamp(std::string title) : m_title{title} {}
 
-    void parse(std::string &line)
+    void parse(influx::InfluxLine &dest, std::string &line)
     {
         /* Parse from 'S' or 'W' */
-        m_value = m_title + "=" + line.substr(1, line.find_first_of("SW")-1);
+        const std::string timestamp = line.substr(1, line.find_first_of("SW")-1);
+        dest.setTimestamp(convertTimestamp(timestamp.c_str()));
     }
 
-    std::string get(void)
-    {
-        return m_value;
+    const std::string &getTitle(void) {
+        return m_title;
     }
 
 private:
     std::string m_title{};
-    std::string m_value{};
 };
 
 /**
@@ -50,30 +53,33 @@ class TimestampedFloat : public OID_itf
 public:
     TimestampedFloat(std::string title) : m_title{title} {}
 
-    void parse(std::string &line)
+    void parse(influx::InfluxLine &dest, std::string &line)
     {
         /*(260330214500S)(03.655*kW) */
         /* Timestamp then value */
 
         /* Timestamp */
-        std::size_t l = line.find(')');
-        /* Timestamp */
-        m_value = m_title + "_timestamp=" + line.substr(1, l - 2);
+        const std::size_t l = line.find(')');
+        const std::string &strTimestmap = line.substr(1, l - 2).c_str();
 
-        m_value += ","+m_title+"_value=";
-
-        std::size_t r = line.find('*', l + 1);
-        m_value += line.substr(l + 2, r - l - 2);
+        dest.addField(
+            m_title + std::string("_timestamp"), 
+            convertTimestamp(strTimestmap.c_str())
+        );
+        
+        const std::size_t r = line.find('*', l + 1);
+        dest.addField(
+            m_title + std::string("_value"),
+            std::stof(line.substr(l + 2, r - l - 2))
+        );
     }
 
-    std::string get(void)
-    {
-        return m_value;
+    const std::string &getTitle(void) {
+        return m_title;
     }
 
 private:
     std::string m_title{};
-    std::string m_value{};
 };
 
 /**
@@ -84,20 +90,14 @@ private:
 class MaximumDemandOfLast13Months : public OID_itf
 {
 public:
-    MaximumDemandOfLast13Months(std::string title) : m_title{title} {}
+    MaximumDemandOfLast13Months(influx::InfluxLine &, std::string title) : m_title{title} {}
 
-    void parse(std::string &)
-    {
-    }
-
-    std::string get(void)
-    {
-        return m_value;
+    const std::string &getTitle(void) {
+        return m_title;
     }
 
 private:
     std::string m_title{};
-    std::string m_value{};
 };
 
 /**
@@ -118,20 +118,18 @@ class FloatingPoint : public OID_itf
 public:
     FloatingPoint(std::string title) : m_title{title} {}
 
-    void parse(std::string &line)
+    void parse(influx::InfluxLine &dest, std::string &line)
     {
-        std::size_t l = line.find('*');
-        m_value = m_title + "=" + line.substr(1, l - 1);
+        const std::size_t l = line.find('*');
+        dest.addField(m_title, std::stof(line.substr(1, l - 1)));
     }
 
-    std::string get(void)
-    {
-        return m_value;
+    const std::string &getTitle(void) {
+        return m_title;
     }
 
 private:
     std::string m_title{};
-    std::string m_value{};
 };
 
 using oidElem_t = std::pair<std::string, OID_itf *>;
@@ -156,40 +154,6 @@ static const std::array<oidElem_t, 15>
         std::make_pair("0-1:24.2.3", new TimestampedFloat("gas_volume")),
     };
 
-
-#if 0
-int fetchValue(COSEMType type, const char *line, size_t lineLength, size_t *nextValue)
-{
-    size_t characterOffset = 0;
-
-    if (type == DOUBLE_LONG)
-    {
-        characterOffset = getByToken(line, lineLength, 0, '*');
-        *nextValue = characterOffset + 2;
-        return characterOffset;
-    }
-    if (type == TIMESTAMP)
-    {
-        // Daylight Saving Time
-        // Active: S
-        // Not active: W
-        characterOffset = getByToken(line, lineLength, 0, 'S');
-        if (characterOffset == lineLength)
-        {
-            // S not found -> W
-            characterOffset = getByToken(line, lineLength, 0, 'W');
-        }
-
-        *nextValue = characterOffset + 3;
-        return characterOffset;
-    }
-    if (type == BIT_STRING)
-        return getByToken(line, lineLength, 0, ')');
-
-    return 0;
-}
-#endif
-
 /**
  * processLine parses a given line from DSMR Serial TTY and fills the
  * given DSMR_T
@@ -207,14 +171,14 @@ int fetchValue(COSEMType type, const char *line, size_t lineLength, size_t *next
  *  result is a 4 hexadecimal character (MSB first)
  * @returns offset of dstLineBuffer
  */
-int decodeLine(std::string &destBuffer, std::string &line)
+error_e decodeLine(influx::InfluxLine &dest, std::string &line)
 {
     /* First decode (key) */
     /* Find first '(' */
     std::size_t pos = line.find('(');
     if (pos == std::string::npos)
     {
-        return 0;
+        return eError_invalid;
     }
 
     /* Extract OID key substrict */
@@ -222,22 +186,66 @@ int decodeLine(std::string &destBuffer, std::string &line)
 
     /* Extract rest of line */
     std::string oidValue = line.substr(pos);
-
+        
     /* Match with map */
     for (auto &p : c_OIDMap)
     {
         if (p.first == oidKey)
         {
-            /* Parse the argument to its appropriate type */
-            p.second->parse(oidValue);
+            /* Parse the line from the meter */
+            p.second->parse(dest, oidValue);
+            
+            std::cout << "parsed: " << p.second->getTitle() << " = '" << oidValue << "'\n";
 
-            /* Get the decoded buffer */
-            destBuffer += p.second->get();
-            destBuffer.push_back(',');
-
-            return 1;
+            return eError_ok;
         }
     }
 
-    return 0;
+    return eError_invalid;
+}
+
+/**
+ * Converts meter timestamp=YYMMDDhhmmssX to Unix timestamp
+ * Assuming the first element is timestamp
+ * //250914143330S
+ * //25Y 09M 14d 14h 33m 30s
+ */
+static time_t convertTimestamp(const char *line)
+{
+    char year[3], month[3], day[3], hour[3], minute[3], second[3];
+
+    // Extract components from the timestamp
+    const char *ts = line + 10;
+    strncpy(year, ts, 2);
+    year[2] = '\0';
+    strncpy(month, ts + 2, 2);
+    month[2] = '\0';
+    strncpy(day, ts + 4, 2);
+    day[2] = '\0';
+    strncpy(hour, ts + 6, 2);
+    hour[2] = '\0';
+    strncpy(minute, ts + 8, 2);
+    minute[2] = '\0';
+    strncpy(second, ts + 10, 2);
+    second[2] = '\0';
+
+    // Convert year to 2000s
+    int yearInt = atoi(year) + 2000 - 1900;
+
+    // Fill timestruct
+    struct tm t;
+    t.tm_year = yearInt;
+    t.tm_mon = atoi(month) - 1;
+    t.tm_mday = atoi(day);
+    t.tm_hour = atoi(hour);
+    t.tm_min = atoi(minute);
+    t.tm_sec = atoi(second);
+
+    /** @todo check the winter saving time 
+     * If timestamps from meter are in DST (S) => 1
+     * Wintertime should be 0
+     */
+    t.tm_isdst = 1;
+
+    return mktime(&t);
 }

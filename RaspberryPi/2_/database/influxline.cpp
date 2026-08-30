@@ -1,11 +1,23 @@
 #include "influxline.hpp"
 
+namespace influx {
+
 /**
  * @brief creates a new measurement (and thus line)
  * @param measurement name of the measurement
  */
 InfluxLine::InfluxLine(const std::string &measurement) : m_measurement{measurement}, m_tags{}, m_fields{}, m_timestamp{}
 {
+}
+
+/**
+ * @brief clears the current line
+ */
+void InfluxLine::clear(void)
+{
+    m_tags.clear();
+    m_fields.clear();
+    m_timestamp.clear();
 }
 
 /**
@@ -80,7 +92,7 @@ std::string InfluxLine::getLine(void)
     std::string ret{};
 
     /* Begin with  Measurement */
-    ret += m_measurement;
+    ret += m_measurement + " ";
 
     /* Append tags if any set */
     if (m_tags.size())
@@ -96,3 +108,5 @@ std::string InfluxLine::getLine(void)
 
     return ret;
 }
+
+};

@@ -2,6 +2,8 @@
 #define DSMR_H
 
 #include <string>
+#include <2_/database/influxline.hpp>
+#include <lib/error_codes.h>
 
 /**
  * OBIS Types
@@ -53,6 +55,6 @@
  * (Carriage Return / Line Feed).
  */
 
-int decodeLine(std::string &destBuffer, std::string &line);
+error_e decodeLine(influx::InfluxLine &dest, std::string &line);
 
 #endif

@@ -17,7 +17,8 @@
 #include <dirent.h>
 #include <time.h>
 
-#include <lib/common.h>
+#include <lib/debug.h>
+#include <lib/error_codes.h>
 #include "tty.hpp"
 
 /**
@@ -31,7 +32,7 @@ std::unique_ptr<Tty> findAndOpenTTYUSB(void)
                                                                 { if (d) {closedir(d);} });
     if (!dir)
     {
-        printErrno(__func__, "Could not open /dev");
+        DBG_ERR("Could not open /dev");
         return nullptr;
     }
 
@@ -46,13 +47,13 @@ std::unique_ptr<Tty> findAndOpenTTYUSB(void)
 
     if (ttyNum < 0)
     {
-        printErrno(__func__, "Could not find a suitable TTYUSB*");
+        DBG_ERR("Could not find a suitable TTYUSB");
         return nullptr;
     }
     // Construct complete path
     char ttyPath[32];
     sprintf(ttyPath, "/dev/ttyUSB%d", ttyNum);
-    printLog(__func__, "Using %s", ttyPath);
+    DBG_INFO("Using %s", ttyPath);
 
     return (std::make_unique<Tty>(ttyPath));
 }
@@ -71,10 +72,10 @@ intr = ^C; quit = ^\; erase = ^?; kill = ^U; eof = ^D; eol = <undef>; eol2 = <un
  */
 int setupTTY(Tty *tty)
 {
-    printLog(__func__, "Setting up terminal %d", tty->getFd());
+    DBG_INFO("Setting up terminal %d", tty->getFd());
     if (!isatty(tty->getFd()))
     {
-        printErrno(__func__, "Given ttyfd is not a TTY!");
+        DBG_ERR("Given ttyfd is not a TTY!");
         return -1;
     }
 
@@ -83,7 +84,7 @@ int setupTTY(Tty *tty)
     if (tcgetattr(tty->getFd(), &config) == -1)
     {
         // erno is set
-        printErrno(__func__, "Failed to get terminal interface config");
+        DBG_ERR("Failed to get terminal interface config");
         return -1;
     }
 
@@ -129,20 +130,20 @@ int setupTTY(Tty *tty)
      */
     if (cfsetospeed(&config, B115200) == -1)
     {
-        printErrno(__func__, "Couldn't set output speed of TTY");
+        DBG_ERR("Couldn't set output speed of TTY");
         return -1;
     }
     // set ispeed to 0, which matches the ospeed
     if (cfsetispeed(&config, B115200) == -1)
     {
-        printErrno(__func__, "Couldn't set input speed of TTY");
+        DBG_ERR("Couldn't set input speed of TTY");
         return -1;
     }
 
     // Apply the configuration
     if (tcsetattr(tty->getFd(), TCSANOW, &config) == -1)
     {
-        printErrno(__func__, "Couldn't set TTYconfig");
+        DBG_ERR( "Couldn't set TTYconfig");
         return -1;
     }
 
@@ -153,7 +154,7 @@ int setupTTY(Tty *tty)
     // return -1;
     // }
 
-    printLog(__func__, "Successfully setup TTY");
+    DBG_ERR( "Successfully setup TTY");
     return 0;
 }
 
@@ -177,12 +178,12 @@ int readTTY(Tty *tty, std::span<char> data)
     int ret = select(tty->getFd() + 1, &fds, NULL, NULL, &tv);
     if (ret < 0)
     {
-        printErrno(__func__, "select failed");
+        DBG_ERR("select failed");
         return ret;
     }
     if (ret == 0)
     {
-        printError(__func__, "Timeout");
+        DBG_ERR("Timeout");
         return ret;
     }
 
