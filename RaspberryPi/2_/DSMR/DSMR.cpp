@@ -1,14 +1,17 @@
-#include "DSMR.hpp"
-#include "common.h"
+#include <array>
 #include <cstring>
-#include <map>
+#include <memory>
 #include <utility>
+
+#include <lib/common.h>
+#include "DSMR.hpp"
 
 class OID_itf
 {
 public:
     /** @brief Parses the given \p line */
     virtual void parse(std::string &line) = 0;
+    
     /** @brief Gets an Influx readable */
     virtual std::string get(void) = 0;
 };
@@ -131,25 +134,28 @@ private:
     std::string m_value{};
 };
 
-static const std::array<std::pair<std::string, std::unique_ptr<OID_itf>>, 15>
+using oidElem_t = std::pair<std::string, OID_itf *>;
+
+static const std::array<oidElem_t, 15>
     c_OIDMap{
-        std::make_pair("0-0:1.0.0", std::make_unique<Timestamp>("timestamp")),
-        std::make_pair("1-0:1.6.0", std::make_unique<TimestampedFloat>("maximum_demand_running_month")),
+        std::make_pair("0-0:1.0.0", new Timestamp("timestamp")),
+        std::make_pair("1-0:1.6.0", new TimestampedFloat("maximum_demand_running_month")),
         // std::make_pair("0-0:98.1.0", std::make_unique<MaximumDemandOfLast13Months>("maximum_demand_last13_months")),
-        std::make_pair("1-0:1.8.1", std::make_unique<FloatingPoint>("meter_electricity_delivered_to_client_tariff_1")),
-        std::make_pair("1-0:1.8.2", std::make_unique<FloatingPoint>("meter_electricity_delivered_to_client_tariff_2")),
-        std::make_pair("1-0:2.8.1", std::make_unique<FloatingPoint>("meter_electricity_delivered_by_client_tariff_1")),
-        std::make_pair("1-0:2.8.2", std::make_unique<FloatingPoint>("meter_electricity_delivered_by_client_tariff_2")),
-        std::make_pair("1-0:21.7.0", std::make_unique<FloatingPoint>("instantaneous_active_positive_power_L1")),
-        std::make_pair("1-0:41.7.0", std::make_unique<FloatingPoint>("instantaneous_active_positive_power_L2")),
-        std::make_pair("1-0:61.7.0", std::make_unique<FloatingPoint>("instantaneous_active_positive_power_L3")),
-        std::make_pair("1-0:22.7.0", std::make_unique<FloatingPoint>("instantaneous_active_negative_power_L1")),
-        std::make_pair("1-0:42.7.0", std::make_unique<FloatingPoint>("instantaneous_active_negative_power_L2")),
-        std::make_pair("1-0:62.7.0", std::make_unique<FloatingPoint>("instantaneous_active_negative_power_L3")),
-        std::make_pair("1-0:1.7.0", std::make_unique<FloatingPoint>("actual_electricity_power_delivered")),
-        std::make_pair("1-0:2.7.0", std::make_unique<FloatingPoint>("actual_electricity_power_received")),
-        std::make_pair("0-1:24.2.3", std::make_unique<TimestampedFloat>("gas_volume")),
+        std::make_pair("1-0:1.8.1", new FloatingPoint("meter_electricity_delivered_to_client_tariff_1")),
+        std::make_pair("1-0:1.8.2", new FloatingPoint("meter_electricity_delivered_to_client_tariff_2")),
+        std::make_pair("1-0:2.8.1", new FloatingPoint("meter_electricity_delivered_by_client_tariff_1")),
+        std::make_pair("1-0:2.8.2", new FloatingPoint("meter_electricity_delivered_by_client_tariff_2")),
+        std::make_pair("1-0:21.7.0", new FloatingPoint("instantaneous_active_positive_power_L1")),
+        std::make_pair("1-0:41.7.0", new FloatingPoint("instantaneous_active_positive_power_L2")),
+        std::make_pair("1-0:61.7.0", new FloatingPoint("instantaneous_active_positive_power_L3")),
+        std::make_pair("1-0:22.7.0", new FloatingPoint("instantaneous_active_negative_power_L1")),
+        std::make_pair("1-0:42.7.0", new FloatingPoint("instantaneous_active_negative_power_L2")),
+        std::make_pair("1-0:62.7.0", new FloatingPoint("instantaneous_active_negative_power_L3")),
+        std::make_pair("1-0:1.7.0", new FloatingPoint("actual_electricity_power_delivered")),
+        std::make_pair("1-0:2.7.0", new FloatingPoint("actual_electricity_power_received")),
+        std::make_pair("0-1:24.2.3", new TimestampedFloat("gas_volume")),
     };
+
 
 #if 0
 int fetchValue(COSEMType type, const char *line, size_t lineLength, size_t *nextValue)
@@ -222,9 +228,11 @@ int decodeLine(std::string &destBuffer, std::string &line)
     {
         if (p.first == oidKey)
         {
-            p.second.get()->parse(oidValue);
-            destBuffer += p.second.get()->get();
+            /* Parse the argument to its appropriate type */
+            p.second->parse(oidValue);
 
+            /* Get the decoded buffer */
+            destBuffer += p.second->get();
             destBuffer.push_back(',');
 
             return 1;

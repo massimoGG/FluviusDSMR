@@ -1,10 +1,8 @@
 #ifndef TTY_H
 #define TTY_H
 
-#include <cstdlib>
 #include <memory>
 #include <span>
-#include <exception>
 
 // for dirent
 #include <sys/types.h>

@@ -9,8 +9,6 @@
 #include <stdio.h>  // For printf
 #include <stdlib.h> // For exit
 #include <string.h>
-
-#include <type_traits>
 #include <functional>
 
 // #include <sys/ioctl.h> // ioctl for exclusive access
@@ -19,7 +17,7 @@
 #include <dirent.h>
 #include <time.h>
 
-#include "common.h"
+#include <lib/common.h>
 #include "tty.hpp"
 
 /**

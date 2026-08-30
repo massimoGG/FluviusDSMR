@@ -1,9 +1,7 @@
 #ifndef DSMR_H
 #define DSMR_H
 
-#include <span>
-#include <memory>
-#include <vector>
+#include <string>
 
 /**
  * OBIS Types

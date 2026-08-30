@@ -1,55 +1,43 @@
 #include <cstdio>
 #include <cstdlib>
-#include <string>
-#include <cerrno>
-#include <exception>
-#include <string>
-#include <vector>
-#include <span>
 
-#include "http.hpp"
-#include "influx.hpp"
-#include "tty.hpp"
+#include <lib/common.h>
+#include <lib/error_codes.h>
 
-#include "DSMR.hpp"
+#include <1_LL/tty/tty.hpp>
 
-#include "common.h"
+#include <2_/database/influx.hpp>
+#include <2_/database/influxline.hpp>
+#include <2_/DSMR/DSMR.hpp>
+
+typedef struct {
+    char *host;
+    char *token;
+    char *organisation;
+    char *bucket;
+} config_t;
 
 /* Constants */
 /** Length of DSMR line */
 constexpr size_t c_DsmrLineLength = 512U;
 
-/** line-protocol buffer */
-constexpr size_t c_LineBufferSize = 2048U;
-
 /* Prototypes */
-int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig);
-void ErrorHandler(void);
+static error_e getConfig(config_t &config);
+static int app_run(std::unique_ptr<Tty> tty, influx::Influx &ifx);
 
 /* Public functions */
 int main(const int, char *[])
 {
     using namespace std;
 
-    // std::set_terminate(ErrorHandler);
-
     setupLogs();
 
-    /* Get env variables */
-    const char *host = getenv("INFLUX_HOST");
-    const char *token = getenv("INFLUX_TOKEN");
-    const char *organisation = getenv("INFLUX_ORG");
-    const char *bucket = getenv("INFLUX_BUCKET");
-
-    if ((host == nullptr) || (token == nullptr) || (organisation == nullptr) || (bucket == nullptr))
-    {
-        printError(__func__, "Environment variables missing!");
-
+    config_t config {};
+    if (eError_ok != getConfig(config)) {
         exit(EXIT_FAILURE);
     }
 
     /* TTY Setup */
-    printLog(__func__, "Finding available TTY");
     std::unique_ptr<Tty> tty = findAndOpenTTYUSB();
     if (!tty)
     {
@@ -59,47 +47,38 @@ int main(const int, char *[])
 
     /* At this point, we found a suitable TTYUSB* and opened it
      * Now setup termios attributes */
-    printLog(__func__, "Setting up TTY");
     if (setupTTY(tty.get()))
     {
         printError(__func__, "Can't setup TTY");
         exit(EXIT_FAILURE);
     }
 
-    /* InfluxDB connection setup */
-    printLog(__func__, "Setting up Influx HTTP connection");
-    struct http_config hconfig = http_init(host, 8086);
-    int ret = http_connect(&hconfig);
-    if (ret == -1)
-    {
-        printError(__func__, "HTTP connection to Influx failed");
-        exit(EXIT_FAILURE);
-    }
+    influx::Influx ifx(config.host, config.organisation, config.bucket, config.token);
 
-    printLog(__func__, "Connection established");
-
-    // At this point we've got an established HTTP connection
-
-    struct influx_config iconfig = influx_init(&hconfig, organisation, bucket, token);
-    // Now validate connection
-    if (!influx_connect(&iconfig))
-    {
-        printError(__func__, "Couldn't connect to server");
-        exit(EXIT_FAILURE);
-    }
-
-    if (!influx_authenticate(&iconfig))
-    {
-        printError(__func__, "Couldn't authenticate Influx connection");
-        exit(EXIT_FAILURE);
-    }
-
-    run(std::move(tty), &iconfig);
+    app_run(std::move(tty), ifx);
 
     return EXIT_FAILURE;
 }
 
-int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig)
+static error_e getConfig(config_t &config)
+{    
+    /* Get env variables */
+    config.host = getenv("INFLUX_HOST");
+    config.token = getenv("INFLUX_TOKEN");
+    config.organisation = getenv("INFLUX_ORG");
+    config.bucket = getenv("INFLUX_BUCKET");
+
+    if ((config.host == nullptr) || (config.token == nullptr) || (config.organisation == nullptr) || (config.bucket == nullptr))
+    {
+        printError(__func__, "Environment variables missing!");
+
+        return eError_failed;    
+    }
+
+    return eError_ok;
+}
+
+static int app_run(std::unique_ptr<Tty> tty, influx::Influx &ifx)
 {
     /* Temporary buffer for DSMR line */
     std::string totalBuffer{""};
@@ -110,9 +89,10 @@ int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig)
     for (;;)
     {
         /* Current Line handling */
-        std::string tempData;
         {
+            std::string tempData;
             tempData.resize(c_DsmrLineLength);
+            
             const int readBytes = readTTY(tty.get(), {tempData.data(), tempData.size()});
             if (readBytes < 0)
             {
@@ -153,8 +133,7 @@ int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig)
             influxBuffer.pop_back();
 
             /* Post everything to Influx */
-
-            if (!influx_write_DSMR(iconfig, influxBuffer))
+            if (ifx.post(influxBuffer))
             {
                 printError(__func__, "Writing data to InfluxDB failed '%s'", influxBuffer.c_str());
             }
@@ -162,10 +141,4 @@ int run(std::unique_ptr<Tty> tty, struct influx_config *iconfig)
             influxBuffer.clear();
         }
     }
-}
-
-void ErrorHandler(void)
-{
-    printError(__func__, "An exception occured!");
-    exit(EXIT_FAILURE);
 }
