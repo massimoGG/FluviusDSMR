@@ -16,11 +16,7 @@ add_executable(DSMR
     
     "1_LL/tty/tty.cpp"
     
-    "2_/database/influx.cpp"
-    "2_/database/influxline.cpp"
     "2_/DSMR/DSMR.cpp"
-
-    "lib/debug.c"
 
     main.cpp
 )
@@ -28,10 +24,8 @@ add_executable(DSMR
 target_include_directories(DSMR PRIVATE
     .
 )
-target_link_libraries(
-    DSMR
-    PRIVATE
-    CURL::libcurl
-)
+
+add_subdirectory(../monorepo/common ${CMAKE_CURRENT_BINARY_DIR}/common)
+add_subdirectory(../monorepo/influx ${CMAKE_CURRENT_BINARY_DIR}/influx)
 
 target_compile_features(DSMR PUBLIC cxx_std_23)

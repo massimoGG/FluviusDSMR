@@ -18,8 +18,7 @@
 #include <dirent.h>
 #include <time.h>
 
-#include <lib/debug.h>
-#include <lib/error_codes.h>
+#include <debug.h>
 #include "tty.hpp"
 
 /** Length of DSMR line */

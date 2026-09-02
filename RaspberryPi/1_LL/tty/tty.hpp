@@ -1,10 +1,9 @@
 #ifndef TTY_H
 #define TTY_H
 
-#include "lib/error_codes.h"
+#include <error_codes.h>
 #include <memory>
 #include <span>
-#include <optional>
 
 // for dirent
 #include <sys/types.h>

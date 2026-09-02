@@ -2,8 +2,8 @@
 #define DSMR_H
 
 #include <string>
-#include <2_/database/influxline.hpp>
-#include <lib/error_codes.h>
+#include <influxline.hpp>
+#include <error_codes.h>
 
 /**
  * OBIS Types

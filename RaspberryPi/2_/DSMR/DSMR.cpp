@@ -3,12 +3,10 @@
 #include <ctime>
 #include <utility>
 
-#include <iostream>
-
-#include <2_/database/influxline.hpp>
+#include <influxline.hpp>
 #include "DSMR.hpp"
-#include <lib/debug.h>
-#include <lib/error_codes.h>
+#include <debug.h>
+#include <error_codes.h>
 
 static time_t convertTimestamp(const char *line);
 

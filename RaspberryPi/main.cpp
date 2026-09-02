@@ -1,15 +1,12 @@
-#include <cstdio>
-#include <cstring>
 #include <cstdlib>
-#include <iostream>
 
-#include <lib/debug.h>
-#include <lib/error_codes.h>
+#include <debug.h>
+#include <error_codes.h>
 
 #include <1_LL/tty/tty.hpp>
 
-#include <2_/database/influx.hpp>
-#include <2_/database/influxline.hpp>
+#include <influx.hpp>
+#include <influxline.hpp>
 #include <2_/DSMR/DSMR.hpp>
 #include <string>
 
