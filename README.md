@@ -19,13 +19,14 @@ The DSMR (Dutch Smart Meter Requirements) P1 port provides access to real-time d
   - Parses the data and convert to line protocol
   - Line protocol is then sent to InfluxDB
 
-### Future Plans
-
-- Transition the project to an STM32 microcontroller.
-- Implement Ethernet connectivity for remote data access and monitoring.
-- Enhance the functionality to include additional features such as data visualization and alerting.
-
 ## Getting Started
+
+### Cross compile for Raspberry pi
+```
+cmake --toolchain RaspberryPi/toolchain.cmake --fresh -B build/ -S RaspberryPi
+cmake --build build/
+```
+
 
 ### Prerequisites
 

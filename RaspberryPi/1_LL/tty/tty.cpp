@@ -6,7 +6,6 @@
  * - https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/
  * - https://en.wikibooks.org/wiki/Serial_Programming/termios
  */
-#include <optional>
 #include <stdio.h>  // For printf
 #include <stdlib.h> // For exit
 #include <string.h>

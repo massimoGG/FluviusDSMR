@@ -1,4 +1,1 @@
-{
-  "C_Cpp.default.compileCommands": ["./RaspberryPi/build/compile_commands.json"],
-  "clang-format.style": "WebKit"
-}
+
